@@ -1,32 +1,29 @@
-module.exports = function (options) {
-	require("./lib/mqtt_server.js")({
-		port: options.mqtt.port,
-		db_url: options.mqtt.db_url
-	}, function (err, mqtt_server) {
+var mongoose = require("mongoose")
+var App = require("./lib/app.js").App;
+var middlewares = require("./lib/app.js").middlewares;
+var app = new App({});
 
-		require("./lib/database.js")({
-			db_url: options.database.db_url,
-			streams_dir: options.database.streams_dir,
-		}, function (err, db) {
-			require("./lib/http_server.js")({
-				db: db,
-				mqtt: mqtt_server,
-			}, function (err, http_server) {
-				http_server.listen(options.http.port);
-			});
+var db = mongoose.connection;
+db.once("open", function () {
+	require("./streams")(app, function (err) {
+		app.use(middlewares.toString);
+		app.use(middlewares.toJSON);
+		//app.use(function (app, topic, payload, next) {
+		//	console.log(topic, payload);
+		//		next(null, app, topic, payload);
+		//	});
+		app.use(app.route());
+		app.use(function (app, topic, model, next) {
+			if (model) {
+				model.save(function (err) {
+					if (err) {
+						console.log(err);
+					}
+					console.log(model, "saved");
+					next(null, app, topic, model);
+				});
+			}
 		});
 	});
-}
-
-var options = {
-	mqtt: {
-		db_url: "mongodb://localhost:27017/mqtt",
-	},
-	database: {
-		db_url: "mongodb://localhost:27017/packy",
-		streams_dir: "/Users/micahfitzgerald/Dropbox/Code/packy/streams/",
-	},
-	http: {
-		port: 8080,
-	}
-}
+});
+mongoose.connect('mongodb://localhost/packy');
